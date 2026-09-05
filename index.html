@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Ledger">
+<meta name="theme-color" content="#16262B">
+<title>The Daily Ledger</title>
+<style>
+  :root{
+    --bg: #16262B;
+    --bg-alt: #1E323A;
+    --line: #2B4149;
+    --ink: #F2EEE3;
+    --ink-muted: #9FB0AE;
+    --gold: #D9A441;
+    --gold-dim: #8A6C34;
+    --coral: #C4675A;
+  }
+  *{ box-sizing: border-box; }
+  html,body{ margin:0; padding:0; }
+  body{
+    background: var(--bg);
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
+  }
+  .serif{ font-family: ui-serif, Georgia, "Iowan Old Style", "Palatino Linotype", serif; }
+  .mono{ font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+
+  .wrap{
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 28px 20px 60px;
+  }
+
+  header{
+    display:flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 16px;
+    margin-bottom: 22px;
+  }
+  header .date{
+    font-size: 1.5rem;
+    line-height: 1.15;
+  }
+  header .date .weekday{
+    display:block;
+    font-size: 0.72rem;
+    letter-spacing: 0.03em;
+    color: var(--ink-muted);
+    margin-bottom: 3px;
+  }
+  .streak-block{ text-align:right; }
+  .streak-num{
+    font-size: 1.5rem;
+    color: var(--gold);
+  }
+  .streak-label{
+    font-size: 0.68rem;
+    color: var(--ink-muted);
+    margin-top: 2px;
+  }
+
+  section{ margin-bottom: 30px; }
+  .section-title{
+    font-size: 1.05rem;
+    margin: 0 0 10px 0;
+    display:flex;
+    align-items:baseline;
+    justify-content: space-between;
+  }
+  .section-title .hint{
+    font-size: 0.72rem;
+    color: var(--ink-muted);
+    font-family: -apple-system, sans-serif;
+  }
+
+  .row{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    border-bottom: 1px solid var(--line);
+    padding: 10px 0;
+  }
+  .row:last-child{ border-bottom:none; }
+  .row .txt{ flex:1; font-size:0.92rem; }
+  .row .sub{ color: var(--ink-muted); font-size:0.78rem; }
+  .row .del{
+    background:none; border:none; color: var(--ink-muted);
+    font-size: 1rem; cursor:pointer; padding: 2px 6px;
+  }
+  .row .del:hover{ color: var(--coral); }
+
+  input[type=number], input[type=text]{
+    background: var(--bg-alt);
+    border: 1px solid var(--line);
+    color: var(--ink);
+    border-radius: 3px;
+    padding: 8px 9px;
+    font-size: 0.92rem;
+    font-family: inherit;
+  }
+  input::placeholder{ color: var(--ink-muted); }
+  input:focus{ outline: 1px solid var(--gold); border-color: var(--gold); }
+
+  .entry-form{
+    display:flex;
+    gap: 8px;
+    margin-top: 8px;
+  }
+  .entry-form input[type=text]{ flex:1; min-width:0; }
+  .entry-form input.small{ width: 68px; flex: none; }
+  .entry-form input.wnum{ width: 90px; flex:none; }
+
+  button.add{
+    background: var(--gold);
+    color: #1B140A;
+    border: none;
+    border-radius: 3px;
+    padding: 0 14px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    font-weight: 600;
+  }
+  button.add:active{ transform: translateY(1px); }
+
+  .weight-now{
+    display:flex;
+    align-items:baseline;
+    gap: 10px;
+    margin-bottom: 8px;
+  }
+  .weight-now .big{ font-size: 1.9rem; }
+  .weight-now .delta{ font-size: 0.85rem; }
+  .delta.down{ color: #8FBF9A; }
+  .delta.up{ color: var(--coral); }
+  .delta.flat{ color: var(--ink-muted); }
+
+  .empty{
+    color: var(--ink-muted);
+    font-size: 0.85rem;
+    padding: 6px 0;
+    font-style: italic;
+  }
+
+  .dotrow{ display:flex; gap: 10px; margin-top: 4px; }
+  .dot{
+    width: 9px; height:9px; border-radius:50%;
+    border: 1px solid var(--ink-muted);
+  }
+  .dot.filled{ background: var(--gold); border-color: var(--gold); }
+  .dot.today{ box-shadow: 0 0 0 2px rgba(217,164,65,0.35); }
+  .daylabels{ display:flex; gap:10px; margin-top:5px; }
+  .daylabels span{ width:9px; text-align:center; font-size:0.6rem; color: var(--ink-muted); }
+
+  .goal-row{
+    display:flex; justify-content: space-between; align-items:center;
+    border-bottom:1px solid var(--line); padding: 11px 0;
+  }
+  .goal-row:last-child{ border-bottom:none; }
+  .goal-row label{ font-size: 0.88rem; color: var(--ink-muted); }
+  .goal-row .gval{ display:flex; align-items:center; gap:6px; }
+  .goal-row input{ width: 78px; text-align:right; }
+  .unit{ font-size: 0.78rem; color: var(--ink-muted); }
+
+  svg.chart{ display:block; width:100%; height:64px; }
+
+  footer{
+    margin-top: 36px;
+    text-align:center;
+  }
+  .reset-btn{
+    background:none;
+    border: 1px solid var(--line);
+    color: var(--ink-muted);
+    font-size: 0.72rem;
+    padding: 6px 12px;
+    border-radius: 3px;
+    cursor: pointer;
+  }
+  .reset-btn:hover{ border-color: var(--coral); color: var(--coral); }
+
+  .loading{
+    text-align:center;
+    color: var(--ink-muted);
+    padding: 60px 0;
+    font-size: 0.85rem;
+  }
+</style>
+</head>
+
+<body>
+<div class="wrap" id="app">
+  <div class="loading">Opening the ledger…</div>
+</div>
+
+<script>
+(function(){
+  const STORE_KEY = 'daily-ledger-data';
+  const app = document.getElementById('app');
+
+  const DAY_MS = 86400000;
+  function todayKey(d){
+    d = d || new Date();
+    const y = d.getFullYear(), m = String(d.getMonth()+1).padStart(2,'0'), da = String(d.getDate()).padStart(2,'0');
+    return `${y}-${m}-${da}`;
+  }
+  function keyToDate(k){ const [y,m,d] = k.split('-').map(Number); return new Date(y, m-1, d); }
+  function addDays(k, n){ const d = keyToDate(k); d.setDate(d.getDate()+n); return todayKey(d); }
+  function fmtHeaderDate(){
+    return new Date().toLocaleDateString(undefined, { weekday:'long' }) + '||' +
+           new Date().toLocaleDateString(undefined, { month:'long', day:'numeric' });
+  }
+  function uid(){ return Math.random().toString(36).slice(2,9); }
+
+  function defaultData(){
+    return {
+      profile: { weightUnit: 'lb', weightGoal: null, exerciseGoalDays: 4, calorieGoal: null },
+      days: {}
+    };
+  }
+
+  let data = null;
+
+  async function load(){
+    try{
+      const raw = localStorage.getItem(STORE_KEY);
+      data = raw ? JSON.parse(raw) : defaultData();
+    }catch(e){
+      data = defaultData();
+    }
+    render();
+  }
+
+  function save(){
+    try{
+      localStorage.setItem(STORE_KEY, JSON.stringify(data));
+    }catch(e){ /* best effort — private browsing mode can block this */ }
+  }
+
+  function getDay(key){
+    if(!data.days[key]) data.days[key] = { weight: null, meals: [], exercise: [] };
+    return data.days[key];
+  }
+
+  function hasLog(key){
+    const d = data.days[key];
+    if(!d) return false;
+    return d.weight != null || (d.meals && d.meals.length) || (d.exercise && d.exercise.length);
+  }
+
+  function computeStreak(){
+    let k = todayKey();
+    if(!hasLog(k)) k = addDays(k, -1); // grace: today not logged yet doesn't break streak
+    let count = 0;
+    while(hasLog(k)){
+      count++;
+      k = addDays(k, -1);
+    }
+    return count;
+  }
+
+  function lastNDays(n){
+    const out = [];
+    let k = todayKey();
+    for(let i=0;i<n;i++){ out.unshift(k); k = addDays(k,-1); }
+    return out;
+  }
+
+  function tallySVG(n){
+    // groups of 5 tally strokes
+    const groups = Math.ceil(n/5) || (n===0?0:1);
+    let x = 0;
+    let parts = [];
+    let remaining = n;
+    const gw = 34;
+    for(let g=0; g<Math.floor(n/5); g++){
+      parts.push(strokeGroup(x, 5));
+      x += gw;
+      remaining -= 5;
+    }
+    if(remaining > 0){ parts.push(strokeGroup(x, remaining)); x += gw; }
+    const w = Math.max(x, 10);
+    return `<svg class="mono" width="${w}" height="22" viewBox="0 0 ${w} 22" xmlns="http://www.w3.org/2000/svg">${parts.join('')}</svg>`;
+  }
+  function strokeGroup(x0, n){
+    let s = '';
+    const spacing = 6;
+    for(let i=0;i<Math.min(n,4);i++){
+      const x = x0 + 3 + i*spacing;
+      s += `<line x1="${x}" y1="2" x2="${x}" y2="20" stroke="var(--gold)" stroke-width="2"/>`;
+    }
+    if(n>=5){
+      s += `<line x1="${x0+1}" y1="19" x2="${x0+22}" y2="3" stroke="var(--gold)" stroke-width="2"/>`;
+    }
+    return s;
+  }
+
+  function weightSparkline(){
+    const entries = Object.keys(data.days).sort().filter(k=>data.days[k].weight!=null)
+      .slice(-30).map(k=>({k, w:data.days[k].weight}));
+    if(entries.length < 2){
+      return `<div class="empty">Log weight on a few different days to see your trend line.</div>`;
+    }
+    const ws = entries.map(e=>e.w);
+    const min = Math.min(...ws), max = Math.max(...ws);
+    const range = (max-min) || 1;
+    const W = 300, H = 50, pad = 4;
+    const pts = entries.map((e,i)=>{
+      const x = pad + (i/(entries.length-1)) * (W-2*pad);
+      const y = H - pad - ((e.w-min)/range) * (H-2*pad);
+      return [x,y];
+    });
+    const path = pts.map((p,i)=> (i===0?'M':'L') + p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ');
+    const last = pts[pts.length-1];
+    return `<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+      <path d="${path}" fill="none" stroke="#D9A441" stroke-width="2" vector-effect="non-scaling-stroke"/>
+      <circle cx="${last[0]}" cy="${last[1]}" r="3" fill="#D9A441"/>
+    </svg>`;
+  }
+
+  function exerciseBars(){
+    const days = lastNDays(7);
+    const mins = days.map(k => (data.days[k]?.exercise||[]).reduce((s,e)=>s+(Number(e.minutes)||0),0));
+    const max = Math.max(...mins, 30);
+    const W = 300, H = 50, bw = 30, gap = (W - bw*7)/8;
+    let bars = '';
+    days.forEach((k,i)=>{
+      const h = Math.max(2, (mins[i]/max) * (H-4));
+      const x = gap + i*(bw+gap);
+      const y = H - h;
+      bars += `<rect x="${x}" y="${y}" width="${bw}" height="${h}" rx="2" fill="${mins[i]>0? '#D9A441' : '#2B4149'}"/>`;
+    });
+    return `<svg class="chart" viewBox="0 0 ${W} ${H}">${bars}</svg>`;
+  }
+
+  function consistencyDots(){
+    const days = lastNDays(7);
+    const today = todayKey();
+    const labels = days.map(k => keyToDate(k).toLocaleDateString(undefined,{weekday:'narrow'}));
+    let dots = days.map(k => `<span class="dot ${hasLog(k)?'filled':''} ${k===today?'today':''}"></span>`).join('');
+    let lbls = labels.map(l=>`<span>${l}</span>`).join('');
+    return `<div class="dotrow">${dots}</div><div class="daylabels">${lbls}</div>`;
+  }
+
+  function weightDelta(){
+    const keys = Object.keys(data.days).sort().filter(k=>data.days[k].weight!=null);
+    if(keys.length===0) return null;
+    const lastKey = keys[keys.length-1];
+    const last = data.days[lastKey].weight;
+    if(keys.length===1) return {val:last, delta:null};
+    const prev = data.days[keys[keys.length-2]].weight;
+    return {val:last, delta: last-prev};
+  }
+
+  function render(){
+    const [weekday, monthday] = fmtHeaderDate().split('||');
+    const tk = todayKey();
+    const today = getDay(tk);
+    const streak = computeStreak();
+    const wDelta = weightDelta();
+    const unit = data.profile.weightUnit;
+
+    app.innerHTML = `
+      <header>
+        <div class="date serif">
+          <span class="weekday">${weekday}</span>
+          ${monthday}
+        </div>
+        <div class="streak-block">
+          <div class="streak-num">${tallySVG(streak)}</div>
+          <div class="streak-label">${streak} day${streak===1?'':'s'} running</div>
+        </div>
+      </header>
+
+      <section id="sec-weight">
+        <div class="section-title serif">Weight
+          <span class="hint">${data.profile.weightGoal!=null ? 'goal ' + data.profile.weightGoal + ' ' + unit : ''}</span>
+        </div>
+        ${wDelta ? `<div class="weight-now">
+            <span class="big mono">${wDelta.val} ${unit}</span>
+            ${wDelta.delta!=null ? `<span class="delta ${wDelta.delta<0?'down':wDelta.delta>0?'up':'flat'} mono">${wDelta.delta===0?'no change': (wDelta.delta>0?'+':'') + wDelta.delta.toFixed(1) + ' since last log'}</span>` : ''}
+          </div>` : ''}
+
+        ${weightSparkline()}
+        <div class="entry-form">
+          <input type="number" step="0.1" inputmode="decimal" id="w-input" class="wnum" placeholder="${today.weight!=null? today.weight : 'today, ' + unit}">
+          <button class="add" id="w-add">Log</button>
+        </div>
+      </section>
+
+      <section id="sec-meals">
+        <div class="section-title serif">Meals
+          <span class="hint">${today.meals.length} logged today</span>
+        </div>
+        ${today.meals.length ? today.meals.map(m => `
+          <div class="row">
+            <div class="txt">${escapeHtml(m.text)}${m.cals? ` <span class="sub mono">${m.cals} cal</span>`:''}</div>
+            <button class="del" data-kind="meal" data-id="${m.id}">✕</button>
+          </div>`).join('') : `<div class="empty">Nothing logged yet today.</div>`}
+        <div class="entry-form">
+          <input type="text" id="meal-text" placeholder="what did you eat">
+          <input type="number" id="meal-cals" class="small" placeholder="cal">
+          <button class="add" id="meal-add">Add</button>
+        </div>
+      </section>
+
+      <section id="sec-exercise">
+        <div class="section-title serif">Exercise
+          <span class="hint">${today.exercise.length} logged today</span>
+        </div>
+        ${today.exercise.length ? today.exercise.map(x => `
+          <div class="row">
+            <div class="txt">${escapeHtml(x.type)} <span class="sub mono">${x.minutes} min</span></div>
+            <button class="del" data-kind="exercise" data-id="${x.id}">✕</button>
+          </div>`).join('') : `<div class="empty">Nothing logged yet today.</div>`}
+
+        ${exerciseBars()}
+        <div class="entry-form">
+          <input type="text" id="ex-text" placeholder="activity">
+          <input type="number" id="ex-mins" class="small" placeholder="min">
+          <button class="add" id="ex-add">Add</button>
+        </div>
+      </section>
+
+      <section id="sec-week">
+        <div class="section-title serif">This week</div>
+        ${consistencyDots()}
+      </section>
+
+      <section id="sec-goals">
+        <div class="section-title serif">Goals</div>
+        <div class="goal-row">
+          <label>Target weight</label>
+          <div class="gval"><input type="number" step="0.1" id="goal-weight" value="${data.profile.weightGoal ?? ''}" placeholder="—"><span class="unit">${unit}</span></div>
+        </div>
+        <div class="goal-row">
+          <label>Exercise days / week</label>
+          <div class="gval"><input type="number" id="goal-exdays" value="${data.profile.exerciseGoalDays ?? ''}" placeholder="—"></div>
+        </div>
+        <div class="goal-row">
+          <label>Daily calorie target</label>
+          <div class="gval"><input type="number" id="goal-cals" value="${data.profile.calorieGoal ?? ''}" placeholder="optional"></div>
+        </div>
+      </section>
+
+      <footer>
+        <button class="reset-btn" id="reset-btn">clear all data</button>
+      </footer>
+
+    `;
+
+    wire();
+  }
+
+  function escapeHtml(s){
+    return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  function wire(){
+    const tk = todayKey();
+
+    document.getElementById('w-add').onclick = () => {
+      const v = parseFloat(document.getElementById('w-input').value);
+      if(!isNaN(v)){ getDay(tk).weight = v; save(); render(); }
+    };
+    document.getElementById('meal-add').onclick = () => {
+      const t = document.getElementById('meal-text').value.trim();
+      if(!t) return;
+      const c = document.getElementById('meal-cals').value;
+      getDay(tk).meals.push({ id: uid(), text: t, cals: c? Number(c): null });
+      save(); render();
+    };
+    document.getElementById('ex-add').onclick = () => {
+      const t = document.getElementById('ex-text').value.trim();
+      const m = document.getElementById('ex-mins').value;
+      if(!t || !m) return;
+      getDay(tk).exercise.push({ id: uid(), type: t, minutes: Number(m) });
+      save(); render();
+    };
+
+    document.querySelectorAll('.del').forEach(btn => {
+      btn.onclick = () => {
+        const kind = btn.dataset.kind, id = btn.dataset.id;
+        const d = getDay(tk);
+        if(kind==='meal') d.meals = d.meals.filter(m=>m.id!==id);
+        if(kind==='exercise') d.exercise = d.exercise.filter(x=>x.id!==id);
+        save(); render();
+      };
+    });
+
+    ['w-input','meal-text','meal-cals','ex-text','ex-mins'].forEach(id=>{
+      const el = document.getElementById(id);
+      el.addEventListener('keydown', e=>{
+        if(e.key==='Enter'){
+          if(id==='w-input') document.getElementById('w-add').click();
+          if(id==='meal-text'||id==='meal-cals') document.getElementById('meal-add').click();
+          if(id==='ex-text'||id==='ex-mins') document.getElementById('ex-add').click();
+        }
+      });
+    });
+
+    document.getElementById('goal-weight').onchange = e => {
+      data.profile.weightGoal = e.target.value? Number(e.target.value): null; save(); render();
+    };
+    document.getElementById('goal-exdays').onchange = e => {
+      data.profile.exerciseGoalDays = e.target.value? Number(e.target.value): null; save(); render();
+    };
+    document.getElementById('goal-cals').onchange = e => {
+      data.profile.calorieGoal = e.target.value? Number(e.target.value): null; save(); render();
+    };
+
+    document.getElementById('reset-btn').onclick = () => {
+      if(confirm('Clear every entry and goal? This cannot be undone.')){
+        data = defaultData();
+        save(); render();
+      }
+    };
+  }
+
+  load();
+})();
+</script>
+</body>
+</html>
