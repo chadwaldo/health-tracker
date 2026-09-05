@@ -7,6 +7,10 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Ledger">
 <meta name="theme-color" content="#16262B">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="icon" href="favicon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="manifest" href="site.webmanifest">
 <title>The Daily Ledger</title>
 <style>
   :root{
@@ -117,6 +121,13 @@
   .entry-form input[type=text]{ flex:1; min-width:0; }
   .entry-form input.small{ width: 68px; flex: none; }
   .entry-form input.wnum{ width: 90px; flex:none; }
+
+  .entry-form.meal-form{ flex-wrap: wrap; }
+  .entry-form.meal-form input[type=text]{ flex-basis: 100%; }
+  .entry-form.meal-form input.small{ flex: 1; width: auto; min-width: 0; }
+
+  .macros{ color: var(--ink-muted); font-size:0.78rem; }
+  .macros b{ color: var(--ink); font-weight: 600; }
 
   button.add{
     background: var(--gold);
@@ -359,6 +370,33 @@
     return {val:last, delta: last-prev};
   }
 
+  function num(v){ const n = Number(v); return isNaN(n) ? 0 : n; }
+  function round1(n){ return Math.round(n*10)/10; }
+
+  function mealTotals(meals){
+    return (meals||[]).reduce((t,m)=>({
+      cals: t.cals + num(m.cals),
+      protein: t.protein + num(m.protein),
+      sugar: t.sugar + num(m.sugar)
+    }), {cals:0, protein:0, sugar:0});
+  }
+
+  function mealMacroLine(m){
+    const parts = [];
+    if(m.cals != null && m.cals !== '') parts.push(`${num(m.cals)} cal`);
+    if(m.protein != null && m.protein !== '') parts.push(`${round1(num(m.protein))}g P`);
+    if(m.sugar != null && m.sugar !== '') parts.push(`${round1(num(m.sugar))}g S`);
+    return parts.length ? ` <span class="sub mono">${parts.join(' · ')}</span>` : '';
+  }
+
+  function mealsHint(meals){
+    if(!meals || !meals.length) return 'nothing logged today';
+    const t = mealTotals(meals);
+    const goal = data.profile.calorieGoal;
+    const cal = goal ? `${t.cals} / ${goal} cal` : `${t.cals} cal`;
+    return `${cal} · ${round1(t.protein)}g P · ${round1(t.sugar)}g S`;
+  }
+
   function render(){
     const [weekday, monthday] = fmtHeaderDate().split('||');
     const tk = todayKey();
@@ -397,16 +435,18 @@
 
       <section id="sec-meals">
         <div class="section-title serif">Meals
-          <span class="hint">${today.meals.length} logged today</span>
+          <span class="hint">${mealsHint(today.meals)}</span>
         </div>
         ${today.meals.length ? today.meals.map(m => `
           <div class="row">
-            <div class="txt">${escapeHtml(m.text)}${m.cals? ` <span class="sub mono">${m.cals} cal</span>`:''}</div>
+            <div class="txt">${escapeHtml(m.text)}${mealMacroLine(m)}</div>
             <button class="del" data-kind="meal" data-id="${m.id}">✕</button>
           </div>`).join('') : `<div class="empty">Nothing logged yet today.</div>`}
-        <div class="entry-form">
+        <div class="entry-form meal-form">
           <input type="text" id="meal-text" placeholder="what did you eat">
-          <input type="number" id="meal-cals" class="small" placeholder="cal">
+          <input type="number" min="0" inputmode="numeric" id="meal-cals" class="small" placeholder="cal">
+          <input type="number" min="0" inputmode="decimal" id="meal-protein" class="small" placeholder="protein g">
+          <input type="number" min="0" inputmode="decimal" id="meal-sugar" class="small" placeholder="sugar g">
           <button class="add" id="meal-add">Add</button>
         </div>
       </section>
@@ -474,7 +514,14 @@
       const t = document.getElementById('meal-text').value.trim();
       if(!t) return;
       const c = document.getElementById('meal-cals').value;
-      getDay(tk).meals.push({ id: uid(), text: t, cals: c? Number(c): null });
+      const p = document.getElementById('meal-protein').value;
+      const s = document.getElementById('meal-sugar').value;
+      getDay(tk).meals.push({
+        id: uid(), text: t,
+        cals: c !== '' ? Number(c) : null,
+        protein: p !== '' ? Number(p) : null,
+        sugar: s !== '' ? Number(s) : null
+      });
       save(); render();
     };
     document.getElementById('ex-add').onclick = () => {
@@ -495,12 +542,12 @@
       };
     });
 
-    ['w-input','meal-text','meal-cals','ex-text','ex-mins'].forEach(id=>{
+    ['w-input','meal-text','meal-cals','meal-protein','meal-sugar','ex-text','ex-mins'].forEach(id=>{
       const el = document.getElementById(id);
       el.addEventListener('keydown', e=>{
         if(e.key==='Enter'){
           if(id==='w-input') document.getElementById('w-add').click();
-          if(id==='meal-text'||id==='meal-cals') document.getElementById('meal-add').click();
+          if(id.startsWith('meal-')) document.getElementById('meal-add').click();
           if(id==='ex-text'||id==='ex-mins') document.getElementById('ex-add').click();
         }
       });
