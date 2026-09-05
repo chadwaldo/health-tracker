@@ -83,6 +83,36 @@
     margin-top: 2px;
   }
 
+  .summary{ margin-bottom: 30px; }
+  .summary-cap{
+    display:flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-size: 0.72rem;
+    color: var(--ink-muted);
+    margin-bottom: 6px;
+  }
+  .summary-delta.down{ color: #8FBF9A; }
+  .summary-delta.up{ color: var(--coral); }
+  .summary-delta.flat{ color: var(--ink-muted); }
+  svg.summary-svg{ display:block; width:100%; height: 88px; }
+  .summary-legend{
+    display:flex;
+    gap: 14px;
+    margin-top: 6px;
+    font-size: 0.66rem;
+    color: var(--ink-muted);
+  }
+  .summary-legend i{
+    display:inline-block;
+    width: 9px; height: 9px;
+    margin-right: 4px;
+    vertical-align: middle;
+    border-radius: 2px;
+  }
+  .summary-legend i.ex{ background: var(--gold); }
+  .summary-legend i.wt{ background: var(--ink); border-radius: 50%; }
+
   section{ margin-bottom: 30px; }
   .section-title{
     font-size: 1.05rem;
@@ -465,6 +495,70 @@
     return `${cal} · ${round1(t.protein)}g P · ${round1(t.sugar)}g S`;
   }
 
+  // Compact 14-day snapshot shown right under the date:
+  // gold bars = exercise minutes per day, pale line = weight trend.
+  function summaryChart(){
+    const days = lastNDays(14);
+    if(days.filter(hasLog).length < 2) return '';
+
+    const mins = days.map(k => (data.days[k]?.exercise || []).reduce((s,e)=>s+num(e.minutes), 0));
+    const maxMin = Math.max(...mins, 30);
+    const activeDays = mins.filter(m => m > 0).length;
+
+    const W = 300, H = 88, base = H - 3, topPad = 8;
+    const slot = W / days.length;
+    const bw = slot * 0.6;
+
+    let bars = '';
+    days.forEach((k,i) => {
+      const x = i*slot + (slot-bw)/2;
+      if(mins[i] > 0){
+        const h = Math.max(3, (mins[i]/maxMin) * (base - topPad));
+        bars += `<rect x="${x.toFixed(1)}" y="${(base-h).toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" fill="#D9A441"/>`;
+      } else {
+        bars += `<rect x="${x.toFixed(1)}" y="${(base-2).toFixed(1)}" width="${bw.toFixed(1)}" height="2" fill="#2B4149"/>`;
+      }
+    });
+
+    let wLine = '', deltaHtml = '';
+    const wpts = days.map((k,i) => data.days[k]?.weight != null ? {i, w:data.days[k].weight} : null).filter(Boolean);
+    if(wpts.length >= 2){
+      const ws = wpts.map(p => p.w);
+      const minW = Math.min(...ws), maxW = Math.max(...ws);
+      const range = (maxW - minW) || 1;
+      const coords = wpts.map(p => {
+        const x = p.i*slot + slot/2;
+        const y = topPad + (1 - (p.w-minW)/range) * (base - topPad - 6);
+        return [x, y];
+      });
+      const d = coords.map((c,i) => (i ? 'L' : 'M') + c[0].toFixed(1) + ',' + c[1].toFixed(1)).join(' ');
+      const last = coords[coords.length-1];
+      wLine = `<path d="${d}" fill="none" stroke="#F2EEE3" stroke-width="1.5" stroke-opacity="0.85" vector-effect="non-scaling-stroke"/>` +
+              `<circle cx="${last[0].toFixed(1)}" cy="${last[1].toFixed(1)}" r="2.6" fill="#F2EEE3"/>`;
+      const dv = wpts[wpts.length-1].w - wpts[0].w;
+      const cls = dv < 0 ? 'down' : dv > 0 ? 'up' : 'flat';
+      const txt = dv === 0 ? 'no change' : `${dv > 0 ? '+' : ''}${dv.toFixed(1)} ${data.profile.weightUnit}`;
+      deltaHtml = ` · <span class="summary-delta ${cls}">${txt}</span>`;
+    }
+
+    return `
+      <section class="summary">
+        <div class="summary-cap">
+          <span>Last 14 days</span>
+          <span>${activeDays} active day${activeDays === 1 ? '' : 's'}${deltaHtml}</span>
+        </div>
+        <svg class="summary-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+          <line x1="0" y1="${base}" x2="${W}" y2="${base}" stroke="#2B4149" stroke-width="1" vector-effect="non-scaling-stroke"/>
+          ${bars}
+          ${wLine}
+        </svg>
+        <div class="summary-legend">
+          <span><i class="ex"></i>exercise min</span>
+          ${wpts.length >= 2 ? '<span><i class="wt"></i>weight</span>' : ''}
+        </div>
+      </section>`;
+  }
+
   function render(){
     const [weekday, monthday] = fmtHeaderDate().split('||');
     const tk = todayKey();
@@ -485,6 +579,8 @@
           <div class="streak-label">${streak} day${streak===1?'':'s'} running</div>
         </div>
       </header>
+
+      ${summaryChart()}
 
       <section id="sec-weight">
         <div class="section-title serif">Weight
