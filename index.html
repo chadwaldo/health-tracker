@@ -24,7 +24,7 @@
     --coral: #C4675A;
   }
   *{ box-sizing: border-box; }
-  html,body{ margin:0; padding:0; }
+  html,body{ margin:0; padding:0; overflow-x: hidden; }
   body{
     background: var(--bg);
     color: var(--ink);
@@ -36,18 +36,29 @@
   .mono{ font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
 
   .wrap{
-    max-width: 480px;
+    max-width: 440px;
     margin: 0 auto;
-    padding: 28px 20px 60px;
+    padding:
+      calc(env(safe-area-inset-top, 0px) + 20px)
+      calc(env(safe-area-inset-right, 0px) + 16px)
+      calc(env(safe-area-inset-bottom, 0px) + 60px)
+      calc(env(safe-area-inset-left, 0px) + 16px);
+  }
+
+  /* buffer band so the Dynamic Island / notch never overlaps the title */
+  .topgap{
+    height: 28px;
   }
 
   header{
     display:flex;
     justify-content: space-between;
     align-items: flex-end;
-    border-bottom: 1px solid var(--line);
-    padding-bottom: 16px;
-    margin-bottom: 22px;
+    flex-wrap: wrap;
+    row-gap: 8px;
+    border-bottom: 2px solid var(--line);
+    padding-bottom: 20px;
+    margin-bottom: 26px;
   }
   header .date{
     font-size: 1.5rem;
@@ -60,11 +71,12 @@
     color: var(--ink-muted);
     margin-bottom: 3px;
   }
-  .streak-block{ text-align:right; }
+  .streak-block{ text-align:right; margin-left:auto; }
   .streak-num{
     font-size: 1.5rem;
     color: var(--gold);
   }
+  .streak-num svg{ max-width: 140px; height: auto; }
   .streak-label{
     font-size: 0.68rem;
     color: var(--ink-muted);
@@ -144,7 +156,8 @@
   .weight-now{
     display:flex;
     align-items:baseline;
-    gap: 10px;
+    flex-wrap: wrap;
+    gap: 4px 10px;
     margin-bottom: 8px;
   }
   .weight-now .big{ font-size: 1.9rem; }
@@ -186,6 +199,22 @@
     margin-top: 36px;
     text-align:center;
   }
+  .io-row{
+    display:flex;
+    gap: 10px;
+    justify-content:center;
+    margin-bottom: 14px;
+  }
+  .io-btn{
+    background:none;
+    border: 1px solid var(--line);
+    color: var(--ink-muted);
+    font-size: 0.72rem;
+    padding: 6px 12px;
+    border-radius: 3px;
+    cursor: pointer;
+  }
+  .io-btn:hover{ border-color: var(--gold); color: var(--ink); }
   .reset-btn{
     background:none;
     border: 1px solid var(--line);
@@ -253,6 +282,45 @@
     try{
       localStorage.setItem(STORE_KEY, JSON.stringify(data));
     }catch(e){ /* best effort — private browsing mode can block this */ }
+  }
+
+  function exportData(){
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `daily-ledger-${todayKey()}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  function isValidExport(o){
+    return o && typeof o === 'object' && !Array.isArray(o)
+      && o.profile && typeof o.profile === 'object'
+      && o.days && typeof o.days === 'object' && !Array.isArray(o.days);
+  }
+
+  function handleImportFile(e){
+    const file = e.target.files && e.target.files[0];
+    e.target.value = ''; // let the same file be re-picked later
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      let obj;
+      try{ obj = JSON.parse(reader.result); }
+      catch(err){ alert('That file is not valid JSON.'); return; }
+      if(!isValidExport(obj)){ alert('That does not look like a Daily Ledger export.'); return; }
+      const dayCount = Object.keys(obj.days).length;
+      if(!confirm(`Replace all current data with this file (${dayCount} day${dayCount===1?'':'s'})?\n\nYour current data is kept as a one-step undo in this browser.`)) return;
+      try{ localStorage.setItem(STORE_KEY + '-prev', JSON.stringify(data)); }catch(err){}
+      data = obj;
+      save();
+      render();
+      alert('Import complete.');
+    };
+    reader.readAsText(file);
   }
 
   function getDay(key){
@@ -406,6 +474,7 @@
     const unit = data.profile.weightUnit;
 
     app.innerHTML = `
+      <div class="topgap"></div>
       <header>
         <div class="date serif">
           <span class="weekday">${weekday}</span>
@@ -445,8 +514,8 @@
         <div class="entry-form meal-form">
           <input type="text" id="meal-text" placeholder="what did you eat">
           <input type="number" min="0" inputmode="numeric" id="meal-cals" class="small" placeholder="cal">
-          <input type="number" min="0" inputmode="decimal" id="meal-protein" class="small" placeholder="protein g">
-          <input type="number" min="0" inputmode="decimal" id="meal-sugar" class="small" placeholder="sugar g">
+          <input type="number" min="0" inputmode="decimal" id="meal-protein" class="small" placeholder="protein">
+          <input type="number" min="0" inputmode="decimal" id="meal-sugar" class="small" placeholder="sugar">
           <button class="add" id="meal-add">Add</button>
         </div>
       </section>
@@ -491,7 +560,12 @@
       </section>
 
       <footer>
+        <div class="io-row">
+          <button class="io-btn" id="export-btn">Export data</button>
+          <button class="io-btn" id="import-btn">Import data</button>
+        </div>
         <button class="reset-btn" id="reset-btn">clear all data</button>
+        <input type="file" id="import-file" accept="application/json,.json" hidden>
       </footer>
 
     `;
@@ -562,6 +636,10 @@
     document.getElementById('goal-cals').onchange = e => {
       data.profile.calorieGoal = e.target.value? Number(e.target.value): null; save(); render();
     };
+
+    document.getElementById('export-btn').onclick = exportData;
+    document.getElementById('import-btn').onclick = () => document.getElementById('import-file').click();
+    document.getElementById('import-file').onchange = handleImportFile;
 
     document.getElementById('reset-btn').onclick = () => {
       if(confirm('Clear every entry and goal? This cannot be undone.')){
