@@ -22,6 +22,7 @@
     --gold: #D9A441;
     --gold-dim: #8A6C34;
     --coral: #C4675A;
+    --water: #38B6FF;
   }
   *{ box-sizing: border-box; }
   html,body{ margin:0; padding:0; overflow-x: hidden; }
@@ -171,6 +172,46 @@
   .macros{ color: var(--ink-muted); font-size:0.78rem; }
   .macros b{ color: var(--ink); font-weight: 600; }
 
+  .water-row{
+    display:flex;
+    align-items:center;
+    gap: 14px;
+    margin-top: 4px;
+  }
+  .drop-btn{
+    background:none;
+    border:none;
+    padding: 4px;
+    cursor:pointer;
+    line-height:0;
+    border-radius: 50%;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .drop-btn svg{ width: 52px; height: 52px; display:block; }
+  .drop-btn:active{ transform: scale(0.9); }
+  .water-read{ flex:1; }
+  .water-oz{ font-size: 1.9rem; }
+  .water-unit{ font-size: 0.9rem; color: var(--ink-muted); margin-left: 4px; }
+  .water-sub{ font-size: 0.78rem; color: var(--ink-muted); margin-top: 2px; }
+  .water-minus{
+    background:none;
+    border: 1px solid var(--line);
+    color: var(--ink-muted);
+    font-size: 1rem;
+    width: 34px; height: 34px;
+    border-radius: 50%;
+    cursor:pointer;
+  }
+  .water-minus:disabled{ opacity: 0.35; cursor: default; }
+  .water-minus:not(:disabled):hover{ border-color: var(--water); color: var(--water); }
+  .water-pips{
+    display:flex;
+    flex-wrap: wrap;
+    gap: 7px;
+    margin-top: 12px;
+  }
+  .water-pips svg{ width: 15px; height: 15px; display:block; }
+
   button.add{
     background: var(--gold);
     color: #1B140A;
@@ -289,9 +330,11 @@
   }
   function uid(){ return Math.random().toString(36).slice(2,9); }
 
+  const WATER_STEP = 8; // oz per tap
+
   function defaultData(){
     return {
-      profile: { weightUnit: 'lb', weightGoal: null, exerciseGoalDays: 4, calorieGoal: null },
+      profile: { weightUnit: 'lb', weightGoal: null, exerciseGoalDays: 4, calorieGoal: null, waterGoal: 64 },
       days: {}
     };
   }
@@ -354,14 +397,15 @@
   }
 
   function getDay(key){
-    if(!data.days[key]) data.days[key] = { weight: null, meals: [], exercise: [] };
+    if(!data.days[key]) data.days[key] = { weight: null, meals: [], exercise: [], water: 0 };
+    if(data.days[key].water == null) data.days[key].water = 0;
     return data.days[key];
   }
 
   function hasLog(key){
     const d = data.days[key];
     if(!d) return false;
-    return d.weight != null || (d.meals && d.meals.length) || (d.exercise && d.exercise.length);
+    return d.weight != null || (d.meals && d.meals.length) || (d.exercise && d.exercise.length) || num(d.water) > 0;
   }
 
   function computeStreak(){
@@ -470,6 +514,44 @@
 
   function num(v){ const n = Number(v); return isNaN(n) ? 0 : n; }
   function round1(n){ return Math.round(n*10)/10; }
+
+  function dropletSVG(filled){
+    return `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">` +
+      `<path d="M12 2.5s7.5 8.6 7.5 13.2a7.5 7.5 0 0 1-15 0C4.5 11.1 12 2.5 12 2.5Z" ` +
+      `fill="${filled ? 'var(--water)' : 'none'}" stroke="var(--water)" stroke-width="1.6"/></svg>`;
+  }
+
+  function waterSection(day){
+    const oz = num(day.water);
+    const goal = num(data.profile.waterGoal);
+    const cups = Math.round(oz / WATER_STEP);
+    const hint = goal > 0 ? `${oz} / ${goal} oz` : (oz > 0 ? `${oz} oz` : 'nothing logged today');
+
+    let pips = '';
+    if(goal > 0){
+      const goalCups = Math.max(1, Math.ceil(goal / WATER_STEP));
+      const total = Math.max(goalCups, cups);
+      for(let i = 0; i < total; i++){
+        pips += `<span>${dropletSVG(i < cups)}</span>`;
+      }
+    }
+
+    return `
+      <section id="sec-water">
+        <div class="section-title serif">Water
+          <span class="hint">${hint}</span>
+        </div>
+        <div class="water-row">
+          <button class="drop-btn" id="water-add" aria-label="Log ${WATER_STEP} oz of water">${dropletSVG(true)}</button>
+          <div class="water-read">
+            <span class="water-oz mono">${oz}</span><span class="water-unit">oz</span>
+            <div class="water-sub">${cups} &times; ${WATER_STEP} oz today${goal > 0 && oz >= goal ? ' &middot; goal met' : ''}</div>
+          </div>
+          <button class="water-minus" id="water-sub" aria-label="Remove ${WATER_STEP} oz"${oz <= 0 ? ' disabled' : ''}>&minus;</button>
+        </div>
+        ${pips ? `<div class="water-pips">${pips}</div>` : ''}
+      </section>`;
+  }
 
   function mealTotals(meals){
     return (meals||[]).reduce((t,m)=>({
@@ -616,6 +698,8 @@
         </div>
       </section>
 
+      ${waterSection(today)}
+
       <section id="sec-exercise">
         <div class="section-title serif">Exercise
           <span class="hint">${today.exercise.length} logged today</span>
@@ -652,6 +736,10 @@
         <div class="goal-row">
           <label>Daily calorie target</label>
           <div class="gval"><input type="number" id="goal-cals" value="${data.profile.calorieGoal ?? ''}" placeholder="optional"></div>
+        </div>
+        <div class="goal-row">
+          <label>Water / day</label>
+          <div class="gval"><input type="number" min="0" step="8" id="goal-water" value="${data.profile.waterGoal ?? ''}" placeholder="—"><span class="unit">oz</span></div>
         </div>
       </section>
 
@@ -702,6 +790,13 @@
       save(); render();
     };
 
+    document.getElementById('water-add').onclick = () => {
+      const d = getDay(tk); d.water = num(d.water) + WATER_STEP; save(); render();
+    };
+    document.getElementById('water-sub').onclick = () => {
+      const d = getDay(tk); d.water = Math.max(0, num(d.water) - WATER_STEP); save(); render();
+    };
+
     document.querySelectorAll('.del').forEach(btn => {
       btn.onclick = () => {
         const kind = btn.dataset.kind, id = btn.dataset.id;
@@ -731,6 +826,9 @@
     };
     document.getElementById('goal-cals').onchange = e => {
       data.profile.calorieGoal = e.target.value? Number(e.target.value): null; save(); render();
+    };
+    document.getElementById('goal-water').onchange = e => {
+      data.profile.waterGoal = e.target.value? Number(e.target.value): null; save(); render();
     };
 
     document.getElementById('export-btn').onclick = exportData;
