@@ -126,6 +126,7 @@
     border-radius: 2px;
   }
   .summary-legend i.ex{ background: var(--gold); }
+  .summary-legend i.wat{ background: var(--water); }
   .summary-legend i.wt{ background: var(--ink); border-radius: 50%; }
   .summary-legend i.cal{ background: var(--coral); }
 
@@ -593,8 +594,9 @@
   }
 
   // Compact 14-day snapshot shown right under the date. Gold bars = exercise
-  // minutes/day, pale line = weight trend, coral line = daily calories (with a
-  // dashed marker at the calorie goal). Tap a legend item to show/hide it.
+  // minutes/day, blue bars = water oz/day, pale line = weight trend, coral line
+  // = daily calories (dashed marker at the calorie goal). Tap a legend item to
+  // show/hide it.
   function summaryChart(){
     const days = lastNDays(14);
     if(days.filter(hasLog).length < 2) return '';
@@ -602,7 +604,6 @@
     const hidden = new Set(data.profile.chartHidden || []);
     const W = 300, H = 88, base = H - 3, topPad = 8;
     const slot = W / days.length;
-    const bw = slot * 0.6;
     const plotH = base - topPad - 6;
 
     // normalized poly-line + end dot for a set of {i, v} points
@@ -619,22 +620,28 @@
              `<circle cx="${last[0].toFixed(1)}" cy="${last[1].toFixed(1)}" r="2.6" fill="${color}"/>`;
     }
 
-    // exercise minutes -> bars
+    // exercise minutes + water oz -> paired bars per day
     const mins = days.map(k => (data.days[k]?.exercise || []).reduce((s,e)=>s+num(e.minutes), 0));
+    const waters = days.map(k => num(data.days[k]?.water));
     const maxMin = Math.max(...mins, 30);
+    const maxWater = Math.max(...waters, num(data.profile.waterGoal) || 64);
     const activeDays = mins.filter(m => m > 0).length;
-    let bars = '';
-    if(!hidden.has('ex')){
-      days.forEach((k,i) => {
-        const x = i*slot + (slot-bw)/2;
-        if(mins[i] > 0){
-          const h = Math.max(3, (mins[i]/maxMin) * (base - topPad));
-          bars += `<rect x="${x.toFixed(1)}" y="${(base-h).toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" fill="#D9A441"/>`;
-        } else {
-          bars += `<rect x="${x.toFixed(1)}" y="${(base-2).toFixed(1)}" width="${bw.toFixed(1)}" height="2" fill="#2B4149"/>`;
-        }
-      });
+    const hasWater = waters.some(w => w > 0);
+
+    const sub = slot * 0.34;
+    function barCol(val, max, x, color){
+      if(val > 0){
+        const h = Math.max(3, (val/max) * (base - topPad));
+        return `<rect x="${x.toFixed(1)}" y="${(base-h).toFixed(1)}" width="${sub.toFixed(1)}" height="${h.toFixed(1)}" fill="${color}"/>`;
+      }
+      return `<rect x="${x.toFixed(1)}" y="${(base-2).toFixed(1)}" width="${sub.toFixed(1)}" height="2" fill="#2B4149"/>`;
     }
+    let bars = '';
+    days.forEach((k,i) => {
+      const x0 = i*slot;
+      if(!hidden.has('ex')) bars += barCol(mins[i], maxMin, x0 + slot*0.13, '#D9A441');
+      if(hasWater && !hidden.has('wat')) bars += barCol(waters[i], maxWater, x0 + slot*0.53, '#38B6FF');
+    });
 
     // weight -> line
     const wpts = days.map((k,i) => data.days[k]?.weight != null ? {i, v:data.days[k].weight} : null).filter(Boolean);
@@ -676,6 +683,7 @@
       return `<button class="lg-btn${hidden.has(series) ? ' off' : ''}" data-series="${series}"><i class="${cls}"></i>${label}</button>`;
     }
     let legend = lg('ex', 'ex', 'exercise');
+    if(hasWater) legend += lg('wat', 'wat', 'water');
     if(hasW) legend += lg('wt', 'wt', 'weight');
     if(hasC) legend += lg('cal', 'cal', 'calories');
 
