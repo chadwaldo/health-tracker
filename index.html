@@ -99,11 +99,25 @@
   svg.summary-svg{ display:block; width:100%; height: 88px; }
   .summary-legend{
     display:flex;
-    gap: 14px;
+    flex-wrap: wrap;
+    gap: 8px 14px;
     margin-top: 6px;
     font-size: 0.66rem;
     color: var(--ink-muted);
   }
+  .lg-btn{
+    background:none;
+    border:none;
+    padding: 3px 0;
+    margin:0;
+    font: inherit;
+    color: var(--ink-muted);
+    cursor: pointer;
+    display:inline-flex;
+    align-items:center;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .lg-btn.off{ opacity: 0.4; text-decoration: line-through; }
   .summary-legend i{
     display:inline-block;
     width: 9px; height: 9px;
@@ -113,6 +127,7 @@
   }
   .summary-legend i.ex{ background: var(--gold); }
   .summary-legend i.wt{ background: var(--ink); border-radius: 50%; }
+  .summary-legend i.cal{ background: var(--coral); }
 
   section{ margin-bottom: 30px; }
   .section-title{
@@ -334,7 +349,7 @@
 
   function defaultData(){
     return {
-      profile: { weightUnit: 'lb', weightGoal: null, exerciseGoalDays: 4, calorieGoal: null, waterGoal: 64 },
+      profile: { weightUnit: 'lb', weightGoal: null, exerciseGoalDays: 4, calorieGoal: null, waterGoal: 64, chartHidden: [] },
       days: {}
     };
   }
@@ -577,66 +592,107 @@
     return `${cal} · ${round1(t.protein)}g P · ${round1(t.sugar)}g S`;
   }
 
-  // Compact 14-day snapshot shown right under the date:
-  // gold bars = exercise minutes per day, pale line = weight trend.
+  // Compact 14-day snapshot shown right under the date. Gold bars = exercise
+  // minutes/day, pale line = weight trend, coral line = daily calories (with a
+  // dashed marker at the calorie goal). Tap a legend item to show/hide it.
   function summaryChart(){
     const days = lastNDays(14);
     if(days.filter(hasLog).length < 2) return '';
 
-    const mins = days.map(k => (data.days[k]?.exercise || []).reduce((s,e)=>s+num(e.minutes), 0));
-    const maxMin = Math.max(...mins, 30);
-    const activeDays = mins.filter(m => m > 0).length;
-
+    const hidden = new Set(data.profile.chartHidden || []);
     const W = 300, H = 88, base = H - 3, topPad = 8;
     const slot = W / days.length;
     const bw = slot * 0.6;
+    const plotH = base - topPad - 6;
 
-    let bars = '';
-    days.forEach((k,i) => {
-      const x = i*slot + (slot-bw)/2;
-      if(mins[i] > 0){
-        const h = Math.max(3, (mins[i]/maxMin) * (base - topPad));
-        bars += `<rect x="${x.toFixed(1)}" y="${(base-h).toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" fill="#D9A441"/>`;
-      } else {
-        bars += `<rect x="${x.toFixed(1)}" y="${(base-2).toFixed(1)}" width="${bw.toFixed(1)}" height="2" fill="#2B4149"/>`;
-      }
-    });
-
-    let wLine = '', deltaHtml = '';
-    const wpts = days.map((k,i) => data.days[k]?.weight != null ? {i, w:data.days[k].weight} : null).filter(Boolean);
-    if(wpts.length >= 2){
-      const ws = wpts.map(p => p.w);
-      const minW = Math.min(...ws), maxW = Math.max(...ws);
-      const range = (maxW - minW) || 1;
-      const coords = wpts.map(p => {
+    // normalized poly-line + end dot for a set of {i, v} points
+    function lineFor(pts, lo, hi, color){
+      const range = (hi - lo) || 1;
+      const coords = pts.map(p => {
         const x = p.i*slot + slot/2;
-        const y = topPad + (1 - (p.w-minW)/range) * (base - topPad - 6);
+        const y = topPad + (1 - (p.v - lo)/range) * plotH;
         return [x, y];
       });
       const d = coords.map((c,i) => (i ? 'L' : 'M') + c[0].toFixed(1) + ',' + c[1].toFixed(1)).join(' ');
       const last = coords[coords.length-1];
-      wLine = `<path d="${d}" fill="none" stroke="#F2EEE3" stroke-width="1.5" stroke-opacity="0.85" vector-effect="non-scaling-stroke"/>` +
-              `<circle cx="${last[0].toFixed(1)}" cy="${last[1].toFixed(1)}" r="2.6" fill="#F2EEE3"/>`;
-      const dv = wpts[wpts.length-1].w - wpts[0].w;
+      return `<path d="${d}" fill="none" stroke="${color}" stroke-width="1.5" stroke-opacity="0.9" vector-effect="non-scaling-stroke"/>` +
+             `<circle cx="${last[0].toFixed(1)}" cy="${last[1].toFixed(1)}" r="2.6" fill="${color}"/>`;
+    }
+
+    // exercise minutes -> bars
+    const mins = days.map(k => (data.days[k]?.exercise || []).reduce((s,e)=>s+num(e.minutes), 0));
+    const maxMin = Math.max(...mins, 30);
+    const activeDays = mins.filter(m => m > 0).length;
+    let bars = '';
+    if(!hidden.has('ex')){
+      days.forEach((k,i) => {
+        const x = i*slot + (slot-bw)/2;
+        if(mins[i] > 0){
+          const h = Math.max(3, (mins[i]/maxMin) * (base - topPad));
+          bars += `<rect x="${x.toFixed(1)}" y="${(base-h).toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" fill="#D9A441"/>`;
+        } else {
+          bars += `<rect x="${x.toFixed(1)}" y="${(base-2).toFixed(1)}" width="${bw.toFixed(1)}" height="2" fill="#2B4149"/>`;
+        }
+      });
+    }
+
+    // weight -> line
+    const wpts = days.map((k,i) => data.days[k]?.weight != null ? {i, v:data.days[k].weight} : null).filter(Boolean);
+    const hasW = wpts.length >= 2;
+    let wLine = '', deltaHtml = '';
+    if(hasW){
+      const ws = wpts.map(p => p.v);
+      if(!hidden.has('wt')) wLine = lineFor(wpts, Math.min(...ws), Math.max(...ws), '#F2EEE3');
+      const dv = ws[ws.length-1] - ws[0];
       const cls = dv < 0 ? 'down' : dv > 0 ? 'up' : 'flat';
       const txt = dv === 0 ? 'no change' : `${dv > 0 ? '+' : ''}${dv.toFixed(1)} ${data.profile.weightUnit}`;
       deltaHtml = ` · <span class="summary-delta ${cls}">${txt}</span>`;
     }
 
+    // daily calories -> line, plus a dashed marker at the goal
+    const cpts = days.map((k,i) => {
+      const c = mealTotals(data.days[k]?.meals || []).cals;
+      return c > 0 ? {i, v:c} : null;
+    }).filter(Boolean);
+    const calGoal = num(data.profile.calorieGoal);
+    const hasC = cpts.length >= 2;
+    let cLine = '', calCapHtml = '';
+    if(hasC){
+      const cs = cpts.map(p => p.v);
+      const avg = Math.round(cs.reduce((a,b)=>a+b, 0) / cs.length);
+      if(!hidden.has('cal')){
+        const bounds = calGoal > 0 ? cs.concat(calGoal) : cs;
+        const lo = Math.min(...bounds), hi = Math.max(...bounds);
+        cLine = lineFor(cpts, lo, hi, '#C4675A');
+        if(calGoal > 0){
+          const yG = topPad + (1 - (calGoal - lo)/((hi - lo) || 1)) * plotH;
+          cLine = `<line x1="0" y1="${yG.toFixed(1)}" x2="${W}" y2="${yG.toFixed(1)}" stroke="#C4675A" stroke-opacity="0.45" stroke-width="1" stroke-dasharray="3 3" vector-effect="non-scaling-stroke"/>` + cLine;
+        }
+        calCapHtml = ` · avg ${avg} cal`;
+      }
+    }
+
+    function lg(series, cls, label){
+      return `<button class="lg-btn${hidden.has(series) ? ' off' : ''}" data-series="${series}"><i class="${cls}"></i>${label}</button>`;
+    }
+    let legend = lg('ex', 'ex', 'exercise');
+    if(hasW) legend += lg('wt', 'wt', 'weight');
+    if(hasC) legend += lg('cal', 'cal', 'calories');
+
     return `
       <section class="summary">
         <div class="summary-cap">
           <span>Last 14 days</span>
-          <span>${activeDays} active day${activeDays === 1 ? '' : 's'}${deltaHtml}</span>
+          <span>${activeDays} active day${activeDays === 1 ? '' : 's'}${deltaHtml}${calCapHtml}</span>
         </div>
         <svg class="summary-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
           <line x1="0" y1="${base}" x2="${W}" y2="${base}" stroke="#2B4149" stroke-width="1" vector-effect="non-scaling-stroke"/>
           ${bars}
+          ${cLine}
           ${wLine}
         </svg>
         <div class="summary-legend">
-          <span><i class="ex"></i>exercise min</span>
-          ${wpts.length >= 2 ? '<span><i class="wt"></i>weight</span>' : ''}
+          ${legend}
         </div>
       </section>`;
   }
@@ -789,6 +845,16 @@
       getDay(tk).exercise.push({ id: uid(), type: t, minutes: Number(m) });
       save(); render();
     };
+
+    document.querySelectorAll('.lg-btn').forEach(btn => {
+      btn.onclick = () => {
+        const s = btn.dataset.series;
+        const hid = new Set(data.profile.chartHidden || []);
+        hid.has(s) ? hid.delete(s) : hid.add(s);
+        data.profile.chartHidden = [...hid];
+        save(); render();
+      };
+    });
 
     document.getElementById('water-add').onclick = () => {
       const d = getDay(tk); d.water = num(d.water) + WATER_STEP; save(); render();
